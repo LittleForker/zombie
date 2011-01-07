@@ -73,6 +73,24 @@ brains.get "/soup", (req, res)-> res.send """
 
 brains.get "/useragent", (req, res)-> res.send "<body>#{req.headers["user-agent"]}</body>"
 
+brains.get "/popup", (req, res)-> res.send """
+  <html>
+    <head>
+      <script src="/jquery.js"></script>
+    </head>
+    <body>
+      <a href="#">Pop up</a>
+      <script>
+        $(function() {
+          $("a").click(function() {
+            window.open("http://localhost:3003/soup");
+            return false;
+          });
+        });
+      </script>
+    </body>
+  </html>
+  """
 
 
 vows.describe("Browser").addBatch(
@@ -163,5 +181,13 @@ vows.describe("Browser").addBatch(
     zombie.wants "http://localhost:3003"
       "should resolve URL": (browser)-> assert.equal browser.location.href, "http://localhost:3003"
       "should load page": (browser)-> assert.equal browser.text("title"), "Tap, Tap"
+
+  "popups":
+    zombie.wants "http://localhost:3003/popup"
+      topic: (browser)->
+        browser.clickLink "Pop up", @callback
+      "should open": (browser)->
+        assert.equal browser.location.href, "http://localhost:3003/soup"
+        assert.match browser.text("body"), /Soup/
 
 ).export(module)
