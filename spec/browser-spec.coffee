@@ -187,7 +187,7 @@ vows.describe("Browser").addBatch(
       topic: (browser)->
         browser.clickLink "Pop up", @callback
       "should open": (browser)->
-        assert.equal browser.location.href, "http://localhost:3003/soup"
-        assert.match browser.text("body"), /Soup/
+        assert.equal browser.windows[1].location.href, "http://localhost:3003/soup"
+        assert.match browser.text("body", browser.windows[1].document), /soup/
 
 ).export(module)

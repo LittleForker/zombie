@@ -19,10 +19,10 @@ class Browser extends require("events").EventEmitter
 
 
     window = null
-    # ### browser.open() => Window
-    #
-    # Open new browser window.
-    this.open = ->
+    windows = []
+    browser = this
+
+    this.createWindow = ->
       window = jsdom.createWindow(jsdom.dom.level3.html)
       window.__defineGetter__ "browser", => this
       cookies.extend window
@@ -35,7 +35,22 @@ class Browser extends require("events").EventEmitter
       window.onerror = (event)=> @emit "error", event.error || new Error("Error loading script")
       # TODO: Fix
       window.Image = ->
+
+      window.open = (url) ->
+        popup = browser.createWindow()
+        popup.location = url
+        return popup
+
+      windows.push(window)
+
       return window
+
+    # ### browser.open() => Window
+    #
+    # Open new browser window.
+    this.open = ->
+      return @createWindow()
+
     # Always start with an open window.
     @open()
 
@@ -217,6 +232,10 @@ class Browser extends require("events").EventEmitter
     #
     # Returns the main window.
     @__defineGetter__ "window", -> window
+    # ### browser.windows => Array
+    #
+    # Returns the array of open windows.
+    @__defineGetter__ "windows", -> windows
     # ### browser.document => Document
     #
     # Returns the main window's document. Only valid after opening a document
