@@ -79,11 +79,18 @@ brains.get "/popup", (req, res)-> res.send """
       <script src="/jquery.js"></script>
     </head>
     <body>
-      <a href="#">Pop up</a>
+      <a href="#popup">Pop up</a>
+      <a href="#named-popup">Named pop up</a>
+
       <script>
         $(function() {
-          $("a").click(function() {
+          $("a[href='#popup']").click(function() {
             window.open("http://localhost:3003/soup");
+            return false;
+          });
+
+          $("a[href='#named-popup']").click(function() {
+            window.open("http://localhost:3003/soup", "living");
             return false;
           });
         });
@@ -128,7 +135,7 @@ vows.describe("Browser").addBatch(
           browser.window.location = "http://localhost:3003/"
           browser.wait()
       "should fire done event": (browser)-> assert.ok browser.visit
-     
+
   "content selection":
     zombie.wants "http://localhost:3003/living"
       "query text":
@@ -189,5 +196,17 @@ vows.describe("Browser").addBatch(
       "should open": (browser)->
         assert.equal browser.windows[1].location.href, "http://localhost:3003/soup"
         assert.match browser.text("body", browser.windows[1].document), /soup/
+      "should not change the opener": (browser)->
+        assert.equal browser.windows[0].location.href, "http://localhost:3003/popup"
+      "should be the default window": (browser)->
+        assert.equal browser.window, browser.windows[1]
+
+  "named popups":
+    zombie.wants "http://localhost:3003/popup"
+      topic: (browser)->
+        browser.clickLink "Named pop up", @callback
+      "should be accessible by name": (browser)->
+        assert.equal browser.windows["living"].location.href, "http://localhost:3003/soup"
+        assert.match browser.text("body", browser.windows["living"].document), /soup/
 
 ).export(module)

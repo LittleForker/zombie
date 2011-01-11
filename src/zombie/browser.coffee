@@ -14,7 +14,7 @@ class Browser extends require("events").EventEmitter
     cookies = require("./cookies").use(this)
     storage = require("./storage").use(this)
     eventloop = require("./eventloop").use(this)
-    history = require("./history").use(this)
+    history = require("./history")
     xhr = require("./xhr").use(this)
 
 
@@ -22,13 +22,13 @@ class Browser extends require("events").EventEmitter
     windows = []
     browser = this
 
-    this.createWindow = ->
+    this.createWindow = (name)->
       window = jsdom.createWindow(jsdom.dom.level3.html)
       window.__defineGetter__ "browser", => this
+      history.use(window)
       cookies.extend window
       storage.extend window
       eventloop.extend window
-      history.extend window
       xhr.extend window
       window.JSON = JSON
       # Default onerror handler.
@@ -36,12 +36,15 @@ class Browser extends require("events").EventEmitter
       # TODO: Fix
       window.Image = ->
 
-      window.open = (url) ->
-        popup = browser.createWindow()
+      window.open = (url, name)->
+        popup = browser.createWindow(name)
         popup.location = url
         return popup
 
-      windows.push(window)
+      if name?
+        windows[name] = window
+      else
+        windows.push(window)
 
       return window
 
@@ -246,7 +249,6 @@ class Browser extends require("events").EventEmitter
     # Returns the body Element of the current document.
     @__defineGetter__ "body", -> window.document?.querySelector("body")
 
-
     # Navigation
     # ----------
 
@@ -262,7 +264,7 @@ class Browser extends require("events").EventEmitter
       if typeof options is "function"
         [callback, options] = [options, null]
       @withOptions options, (reset)=>
-        history._assign url
+        window.history._assign url
         @wait (error, browser)->
           reset()
           callback error, browser if callback

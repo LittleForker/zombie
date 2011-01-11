@@ -27,10 +27,17 @@ class Entry
 #
 # Represents window.history.
 class History
-  constructor: (browser)->
+  constructor: (window)->
     # History is a stack of Entry objects.
     stack = []
     index = -1
+
+    browser = window.browser
+
+    window.__defineGetter__ "history", => this
+    window.__defineGetter__ "location", => stack[index]?.location || new Location(this, {})
+    window.__defineSetter__ "location", (url)=>
+      @_assign URL.resolve(stack[index]?.url, url)
 
     # Called when we switch to a new page with the URL of the old page.
     pageChanged = (was)=>
@@ -40,23 +47,18 @@ class History
         resource url
       else if was.hash != url.hash
         # Hash changed. Do not reload page, but do send hashchange
-        evt = browser.document.createEvent("HTMLEvents")
+        evt = window.document.createEvent("HTMLEvents")
         evt.initEvent "hashchange", true, false
-        browser.window.dispatchEvent evt
+        window.dispatchEvent evt
       else
         # Load new page for now (but later on use caching).
         resource url
-    
+
     # Make a request to external resource. We use this to fetch pages and
     # submit forms, see _loadPage and _submit.
     resource = (url, method, data, enctype)=>
       method = (method || "GET").toUpperCase()
       throw new Error("Cannot load resource: #{URL.format(url)}") unless url.protocol && url.hostname
-      # If the browser has a new window, use it. If a document was already
-      # loaded into that window it would have state information we don't want
-      # (e.g. window.$) so open a new window.
-      window = browser.window
-      window = browser.open() if browser.window.document
       # Create new DOM Level 3 document, add features (load external
       # resources, etc) and associate it with current document. From this
       # point on the browser sees a new document, client register event
@@ -186,12 +188,12 @@ class History
       if new_index != index && entry = stack[new_index]
         index = new_index
         if entry.pop
-          if browser.document
+          if window.document
             # Created with pushState/replaceState, send popstate event
-            evt = browser.document.createEvent("HTMLEvents")
+            evt = window.document.createEvent("HTMLEvents")
             evt.initEvent "popstate", false, false
             evt.state = entry.state
-            browser.window.dispatchEvent evt
+            window.dispatchEvent evt
           # Do not load different page unless we're on a different host
           resource stack[index] if was.host != stack[index].host
         else
@@ -242,13 +244,6 @@ class History
       stack[++index] = new Entry(this, url)
       resource stack[index].url, method, data, enctype
 
-    # Add Location/History to window.
-    this.extend = (window)->
-      window.__defineGetter__ "history", => this
-      window.__defineGetter__ "location", => stack[index]?.location || new Location(this, {})
-      window.__defineSetter__ "location", (url)=>
-        @_assign URL.resolve(stack[index]?.url, url)
-
     this.dump = ->
       dump = []
       for i, entry of stack
@@ -292,5 +287,5 @@ class Location
 html.HTMLDocument.prototype.__defineGetter__ "location", -> @parentWindow.location
 
 
-exports.use = (browser)->
-  return new History(browser)
+exports.use = (window)->
+  return new History(window)
