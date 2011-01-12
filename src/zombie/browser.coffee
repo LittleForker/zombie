@@ -36,9 +36,12 @@ class Browser extends require("events").EventEmitter
       # TODO: Fix
       window.Image = ->
 
+      opener = window
+
       window.open = (url, name)->
         popup = browser.createWindow(name)
         popup.location = url
+        popup.opener = opener
         return popup
 
       if name?

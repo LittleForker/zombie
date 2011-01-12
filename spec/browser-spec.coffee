@@ -200,6 +200,8 @@ vows.describe("Browser").addBatch(
         assert.equal browser.windows[0].location.href, "http://localhost:3003/popup"
       "should be the default window": (browser)->
         assert.equal browser.window, browser.windows[1]
+      "should reference its opener": (browser)->
+        assert.ok browser.window.opener == browser.windows[0]
 
   "named popups":
     zombie.wants "http://localhost:3003/popup"
