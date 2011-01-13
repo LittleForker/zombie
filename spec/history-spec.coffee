@@ -113,37 +113,37 @@ vows.describe("History").addBatch(
     "assign":
       zombie.wants "http://localhost:3003/"
         topic: (browser)->
-          @window = browser.window
+          browser.window.foo = "bar"
           browser.window.location.assign "http://localhost:3003/boo"
           browser.document.addEventListener "DOMContentLoaded", => @callback null, browser
           return
         "should add page to history": (browser)-> assert.length browser.window.history, 2
         "should change location URL": (browser)-> assert.equal browser.location, "http://localhost:3003/boo"
         "should load document": (browser)-> assert.match browser.html(), /Eeek!/
-        "should load document in new window": (browser)-> assert.ok browser.window != @window
+        "should not carry over state": (browser)-> assert.isUndefined browser.window.foo
     "replace":
       zombie.wants "http://localhost:3003/"
         topic: (browser)->
-          @window = browser.window
+          browser.window.foo = "bar"
           browser.window.location.replace "http://localhost:3003/boo"
           browser.window.document.addEventListener "DOMContentLoaded", => @callback null, browser
           return
         "should not add page to history": (browser)-> assert.length browser.window.history, 1
         "should change location URL": (browser)-> assert.equal browser.location, "http://localhost:3003/boo"
         "should load document": (browser)-> assert.match browser.html(), /Eeek!/
-        "should load document in new window": (browser)-> assert.ok browser.window != @window
+        "should not carry over state": (browser)-> assert.isUndefined browser.window.foo
     "reload":
       zombie.wants "http://localhost:3003/"
         topic: (browser)->
-          @window = browser.window
           browser.window.document.innerHTML = "Wolf"
+          browser.window.foo = "bar"
           browser.window.location.reload()
           browser.window.document.addEventListener "DOMContentLoaded", => @callback null, browser
           return
         "should not add page to history": (browser)-> assert.length browser.window.history, 1
         "should not change location URL": (browser)-> assert.equal browser.location, "http://localhost:3003/"
         "should reload document": (browser)-> assert.match browser.html(), /Tap, Tap/
-        "should reload document in new window": (browser)-> assert.ok browser.window != @window
+        "should not carry over state": (browser)-> assert.isUndefined browser.window.foo
     "components":
       zombie.wants "http://localhost:3003/"
         topic: (browser)-> browser.location
