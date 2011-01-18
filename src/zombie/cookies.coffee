@@ -128,11 +128,11 @@ class Cookies
 
         if options.expires && options.expires <= browser.clock
           if in_domain = cookies[domain || hostname]
-            if in_path = in_domain[path || pathname]
+            if in_path = in_domain[path || "/"]
               delete in_path[name]
         else
           in_domain = cookies[domain || hostname] ||= {}
-          in_path = in_domain[path || pathname] ||= {}
+          in_path = in_domain[path || "/"] ||= {}
           in_path[name] = options
 
     #### cookies(host, path).addHeader(headers)

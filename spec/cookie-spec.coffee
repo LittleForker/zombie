@@ -23,6 +23,35 @@ brains.get "/cookies_redirect", (req, res)->
   res.cookie "_expires5", "3s", "Expires": new Date(Date.now() + 3000), "Path": "/"
   res.redirect "/"
 
+brains.get "/document.cookie/set", (req, res)-> res.send """
+  <html>
+    <head>
+      <title>Whatever</title>
+      <script src="/jquery.js"></script>
+    </head>
+    <body>
+    </body>
+    <script>
+      document.cookie = "foo=bar;";
+    </script>
+  </html>
+  """
+
+brains.get "/document.cookie/get", (req, res)-> res.send """
+  <html>
+    <head>
+      <title>Whatever</title>
+      <script src="/jquery.js"></script>
+    </head>
+    <body>
+      <span id="cookie"></span>
+    </body>
+    <script>
+      $(function() { $("#cookie").text(document.cookie); });
+    </script>
+  </html>
+  """
+
 vows.describe("Cookies").addBatch(
   "get cookies":
     zombie.wants "http://localhost:3003/cookies"
@@ -115,5 +144,17 @@ vows.describe("Cookies").addBatch(
     "should be accessible": (browser)->
       assert.equal "bar", browser.cookies("localhost").get("foo")
       assert.equal "bar", browser.cookies("www.localhost").get("foo")
+
+  "set cookies using document.cookie":
+    zombie.wants "http://localhost:3003/document.cookie/set"
+      "should set cookies": (browser)->
+        assert.equal browser.window.document.cookie, "foo=bar"
+
+  "get and set cookies using document.cookies":
+    zombie.wants "http://localhost:3003/document.cookie/set"
+      topic: (browser)->
+        browser.visit "http://localhost:3003/document.cookie/get", @callback
+      "should be able to read cookies on a different page": (browser)->
+        assert.equal browser.text("#cookie"), "foo=bar"
 
 ).export(module)
