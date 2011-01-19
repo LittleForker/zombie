@@ -59,6 +59,20 @@ class Browser extends require("events").EventEmitter
     # Always start with an open window.
     @open()
 
+    # ### browser.closeWindow(window)
+    #
+    # Close the given window.
+    this.closeWindow = (w)->
+      if (w.opener)
+        window = w.opener
+
+      for key of windows
+        if windows[key] == w
+          if key.constructor == String
+            delete windows[key]
+          else
+            windows.splice(key, 1)
+
     # Options
     # -------
 

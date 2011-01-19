@@ -77,29 +77,40 @@ brains.get "/title.js", (req, res)-> res.send """
   document.title = "Foobar";
   """
 
-brains.get "/popup", (req, res)-> res.send """
+brains.get /\/popup(\/.*)?/, (req, res)-> res.send """
   <html>
     <head>
+      <title>#{req.params[0]}</title>
       <script src="/jquery.js"></script>
     </head>
     <body>
       <a href="#popup">Pop up</a>
       <a href="#named-popup">Named pop up</a>
+      <a href="#close">Close</a>
 
       <script>
+        function loadScript() {
+          var script = document.createElement("script");
+          script.src = "http://localhost:3003/title.js";
+          document.getElementsByTagName("head")[0].appendChild(script);
+        }
+
         $(function() {
           $("a[href='#popup']").click(function() {
-            window.open("http://localhost:3003/soup");
-
-            var script = document.createElement("script");
-            script.src = "http://localhost:3003/title.js";
-            document.getElementsByTagName("head")[0].appendChild(script);
+            window.open("http://localhost:3003/popup/two");
+            loadScript();
 
             return false;
           });
 
           $("a[href='#named-popup']").click(function() {
-            window.open("http://localhost:3003/soup", "living");
+            window.open("http://localhost:3003/popup/named", "named");
+            loadScript();
+            return false;
+          });
+
+          $("a[href='#close']").click(function() {
+            window.close();
             return false;
           });
         });
@@ -203,8 +214,8 @@ vows.describe("Browser").addBatch(
       topic: (browser)->
         browser.clickLink "Pop up", @callback
       "should open": (browser)->
-        assert.equal browser.windows[1].location.href, "http://localhost:3003/soup"
-        assert.match browser.text("body", browser.windows[1].document), /soup/
+        assert.equal browser.windows[1].location.href, "http://localhost:3003/popup/two"
+        assert.match browser.windows[1].document.title, /two/
       "should not change the opener": (browser)->
         assert.equal browser.windows[0].location.href, "http://localhost:3003/popup"
       "should be the default window": (browser)->
@@ -213,13 +224,26 @@ vows.describe("Browser").addBatch(
         assert.ok browser.window.opener == browser.windows[0]
       "should evaluate code in the right context": (browser)->
         assert.equal browser.windows[0].document.title, "Foobar"
+      "when closed":
+        topic: (browser)->
+          browser.clickLink "Close", @callback
+        "should return focus to its opener": (browser)->
+          assert.equal browser.window.document.title, "Foobar"
+        "should not exist anymore": (browser)->
+          assert.ok !browser.windows[1]
 
   "named popups":
     zombie.wants "http://localhost:3003/popup"
       topic: (browser)->
         browser.clickLink "Named pop up", @callback
       "should be accessible by name": (browser)->
-        assert.equal browser.windows["living"].location.href, "http://localhost:3003/soup"
-        assert.match browser.text("body", browser.windows["living"].document), /soup/
+        assert.equal browser.windows["named"].location.href, "http://localhost:3003/popup/named"
+      "when closed":
+        topic: (browser)->
+          browser.clickLink "Close", @callback
+        "should return focus to its opener": (browser)->
+          assert.equal browser.window.document.title, "Foobar"
+        "should not exist anymore": (browser)->
+          assert.ok !browser.windows["named"]
 
 ).export(module)

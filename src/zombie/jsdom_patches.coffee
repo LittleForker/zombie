@@ -96,6 +96,9 @@ DOMWindow.prototype.__evaluate = (code, filename)->
     window._vars = ([n,v] for n, v of context).filter((v)-> !window[v[0]])
   result
 
+DOMWindow.prototype.close = ->
+  this.browser.closeWindow(this)
+
 # DOMCharacterDataModified event fired when text is added to a
 # TextNode.  This is a crappy implementation, a good one would old and
 # new values in the event.
