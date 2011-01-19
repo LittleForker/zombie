@@ -73,6 +73,10 @@ brains.get "/soup", (req, res)-> res.send """
 
 brains.get "/useragent", (req, res)-> res.send "<body>#{req.headers["user-agent"]}</body>"
 
+brains.get "/title.js", (req, res)-> res.send """
+  document.title = "Foobar";
+  """
+
 brains.get "/popup", (req, res)-> res.send """
   <html>
     <head>
@@ -86,6 +90,11 @@ brains.get "/popup", (req, res)-> res.send """
         $(function() {
           $("a[href='#popup']").click(function() {
             window.open("http://localhost:3003/soup");
+
+            var script = document.createElement("script");
+            script.src = "http://localhost:3003/title.js";
+            document.getElementsByTagName("head")[0].appendChild(script);
+
             return false;
           });
 
@@ -202,6 +211,8 @@ vows.describe("Browser").addBatch(
         assert.equal browser.window, browser.windows[1]
       "should reference its opener": (browser)->
         assert.ok browser.window.opener == browser.windows[0]
+      "should evaluate code in the right context": (browser)->
+        assert.equal browser.windows[0].document.title, "Foobar"
 
   "named popups":
     zombie.wants "http://localhost:3003/popup"

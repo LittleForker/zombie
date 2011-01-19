@@ -1,15 +1,17 @@
 # Fix things that JSDOM doesn't do quite right.
-core = require("jsdom").dom.level3.core
+jsdom = require("jsdom")
+core = jsdom.dom.level3.core
 URL = require("url")
 http = require("http")
 html5 = require("html5").HTML5
+vm = process.binding("evals")
 
 
 # Links/Resources
 # ---------------
 
 # Default behavior for clicking on links: navigate to new URL is specified.
-core.HTMLAnchorElement.prototype._eventDefaults = 
+core.HTMLAnchorElement.prototype._eventDefaults =
   click: (event)->
     anchor = event.target
     anchor.ownerDocument.parentWindow.location = anchor.href if anchor.href
@@ -63,12 +65,36 @@ core.languageProcessors =
     window = document.parentWindow
     window.browser.log -> "Running script from #{filename}" if filename
     try
-      window.browser.evaluate code, filename
+      window.__evaluate code, filename
     catch error
       event = document.createEvent("HTMLEvents")
       event.initEvent "error", true, false
       event.error = error
       window.dispatchEvent event
+
+DOMWindow = jsdom.createWindow().constructor
+
+DOMWindow.prototype.__evaluate = (code, filename)->
+  window = this
+
+  # Unfortunately, using the same context in multiple scripts
+  # doesn't agree with jQuery, Sammy and other scripts I tested,
+  # so each script gets a new context.
+  context = vm.Script.createContext(window)
+  # But we need to carry global variables from one script to the
+  # next, so we're going to store them in window._vars and add them
+  # back to the new context.
+  if window._vars
+    context[v[0]] = v[1] for v in window._vars
+  script = new vm.Script(code, filename || "eval")
+  try
+    result = script.runInContext context
+  catch ex
+    this.log ex.stack.split("\n").slice(0,2)
+    throw ex
+  finally
+    window._vars = ([n,v] for n, v of context).filter((v)-> !window[v[0]])
+  result
 
 # DOMCharacterDataModified event fired when text is added to a
 # TextNode.  This is a crappy implementation, a good one would old and
