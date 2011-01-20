@@ -77,24 +77,26 @@ DOMWindow = jsdom.createWindow().constructor
 DOMWindow.prototype.__evaluate = (code, filename)->
   window = this
 
-  # Unfortunately, using the same context in multiple scripts
-  # doesn't agree with jQuery, Sammy and other scripts I tested,
-  # so each script gets a new context.
-  context = vm.Script.createContext(window)
-  # But we need to carry global variables from one script to the
-  # next, so we're going to store them in window._vars and add them
-  # back to the new context.
-  if window._vars
-    context[v[0]] = v[1] for v in window._vars
-  script = new vm.Script(code, filename || "eval")
-  try
-    result = script.runInContext context
-  catch ex
-    this.log ex.stack.split("\n").slice(0,2)
-    throw ex
-  finally
-    window._vars = ([n,v] for n, v of context).filter((v)-> !window[v[0]])
-  result
+  if typeof code == "function"
+    code.apply window
+  else
+    # Unfortunately, using the same context in multiple scripts
+    # doesn't agree with jQuery, Sammy and other scripts I tested,
+    # so each script gets a new context.
+    context = vm.Script.createContext(window)
+    # But we need to carry global variables from one script to the
+    # next, so we're going to store them in window._vars and add them
+    # back to the new context.
+    if window._vars
+      context[v[0]] = v[1] for v in @window._vars
+    script = new vm.Script(code, filename || "eval")
+    try
+      return script.runInContext context
+    catch ex
+      window.browser.log ex.stack.split("\n").slice(0,2)
+      throw ex
+    finally
+      window._vars = ([n,v] for n, v of context).filter((v)-> !window[v[0]])
 
 DOMWindow.prototype.open = (url, name)->
   window = this.browser.createWindow(name)

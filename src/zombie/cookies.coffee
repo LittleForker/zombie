@@ -23,7 +23,7 @@ class Cookies
 
     domainMatch = (domain, hostname)->
       return true if domain == hostname
-      return domain.charAt(0) == "." && domain.substring(1) == hostname.replace(/^[^.]\./, "")
+      return domain.charAt(0) == "." && domain.substring(1) == hostname.replace(/^[^.]+\./, "")
 
     # Return all the cookies that match the given hostname/path, from most
     # specific to least specific. Returns array of arrays, each item is
@@ -62,8 +62,10 @@ class Cookies
     #
     # * name -- Cookie name
     # * value -- Cookie value
-    # * options -- Options max-age, expires, secure
+    # * options -- Options max-age, expires, secure, domain, path
     this.set = (name, value, options = {})->
+      return if options.domain && !domainMatch(options.domain, hostname)
+      
       name = name.toLowerCase()
       state = { value: value.toString() }
       if options.expires
@@ -72,24 +74,31 @@ class Cookies
         maxage = options["max-age"]
         state.expires = browser.clock + maxage if typeof maxage is "number"
       state.secure = true if options.secure
+      
       if typeof state.expires is "number" && state.expires <= browser.clock
-        if in_domain = cookies[hostname]
-          if in_path = in_domain[pathname]
-            delete in_path[name]
+        @remove(name, options)
       else
-        in_domain = cookies[hostname] ||= {}
-        in_path = in_domain[pathname] ||= {}
+        in_domain = cookies[options.domain || hostname] ||= {}
+        in_path = in_domain[options.path || '/'] ||= {}
         in_path[name] = state
 
-    #### cookies(host, path).remove(name)
+    #### cookies(host, path).remove(name, options?)
     #
     # Deletes a cookie.
     #
     # * name -- Cookie name
+    # * options -- Options domain, path
     this.remove = (name, options = {})->
-      if in_domain = cookies[hostname]
-        if in_path = in_domain[pathname]
+      if in_domain = cookies[options.domain || hostname]
+        if in_path = in_domain[options.path || pathname]
           delete in_path[name.toLowerCase()]
+
+    #### cookies(host, path).clear()
+    #
+    # Clears all cookies.
+    this.clear = (options = {})->
+      if in_domain = cookies[hostname]
+        delete in_domain[pathname]
 
     #### cookies(host, path).update(serialized)
     #
@@ -105,28 +114,18 @@ class Cookies
         fields = cookie.split(/;+/)
         first = fields[0].trim()
         [name, value] = first.split(/\=/, 2)
-
+        
         options = { value: value }
-        domain = path = null
         for field in fields
           [key, val] = field.trim().split(/\=/, 2)
           switch key.toLowerCase()
-            when "domain"   then domain = dequote(val)
-            when "path"     then path   = dequote(val).replace(/%[^\/]*$/, "")
-            when "expires"  then options.expires = new Date(dequote(val)).getTime()
-            when "max-age"  then options.expires = browser.clock + parseInt(dequote(val), 10)
+            when "domain"   then options.domain = dequote(val)
+            when "path"     then options.path   = dequote(val).replace(/%[^\/]*$/, "")
+            when "expires"  then options.expires = new Date(dequote(val))
+            when "max-age"  then options['max-age'] = parseInt(dequote(val), 10)
             when "secure"   then options.secure = true
-        continue if domain && !domainMatch(domain, hostname)
-        continue if path && pathname.indexOf(path) != 0
-
-        if options.expires && options.expires <= browser.clock
-          if in_domain = cookies[domain || hostname]
-            if in_path = in_domain[path || pathname]
-              delete in_path[name]
-        else
-          in_domain = cookies[domain || hostname] ||= {}
-          in_path = in_domain[path || pathname] ||= {}
-          in_path[name] = options
+        
+        @set(name, value, options)
 
     #### cookies(host, path).addHeader(headers)
     #

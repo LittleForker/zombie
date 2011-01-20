@@ -11,6 +11,8 @@ brains.get "/form", (req, res)-> res.send """
         <input type="text" name="email" id="field-email"></label>
         <textarea name="likes" id="field-likes">Warm brains</textarea>
         <input type="password" name="password" id="field-password">
+        <input type="badtype" name="invalidtype" id="field-invalidtype" />
+        <input type="text" name="email2" id="field-email2" />
 
         <label>Hungry</label>
         <label>You bet<input type="checkbox" name="hungry[]" value="you bet" id="field-hungry"></label>
@@ -33,6 +35,27 @@ brains.get "/form", (req, res)-> res.send """
         <select name="state" id="field-state">
           <option>alive</option>
           <option>dead</option>
+          <option>neither</option>
+        </select>
+
+        <span>First address<span>
+        <label for='address1_street'>Street</label>
+        <input type="text" name="addresses[][street]" value="" id="address1_street">
+
+        <label for='address1_city'>City</label>
+        <input type="text" name="addresses[][city]" value="" id="address1_city"> 
+
+        <span>Second address<span>
+        <label for='address2_street'>Street</label>
+        <input type="text" name="addresses[][street]" value="" id="address2_street">
+
+        <label for='address2_city'>City</label>
+        <input type="text" name="addresses[][city]" value="" id="address2_city"> 
+
+        <select name="kills" id="field-kills">
+          <option>Five</option>
+          <option>Seventeen</option>
+          <option id="option-killed-thousands">Thousands</option>
         </select>
 
         <select name="unselected_state" id="field-unselected-state">
@@ -70,6 +93,7 @@ brains.post "/submit", (req, res)-> res.send """
       <div id="state">#{req.body.state}</div>
       <div id="unselected_state">#{req.body.unselected_state}</div>
       <div id="hobbies">#{JSON.stringify(req.body.hobbies)}</div>
+      <div id="addresses">#{JSON.stringify(req.body.addresses)}</div>
       <div id="unknown">#{req.body.unknown}</div>
       <div id="clicked">#{req.body.button}</div>
       <div id="image_clicked">#{req.body.image}</div>
@@ -106,7 +130,7 @@ vows.describe("Forms").addBatch(
   "fill field":
     zombie.wants "http://localhost:3003/form"
       topic: (browser)->
-        for field in ["email", "likes", "name", "password"]
+        for field in ["email", "likes", "name", "password", "invalidtype", "email2"]
           do (field)->
             browser.querySelector("#field-#{field}").addEventListener "change", -> browser["#{field}Changed"] = true
         @callback null, browser
@@ -130,6 +154,16 @@ vows.describe("Forms").addBatch(
           browser.fill ":password[name=password]", "b100d"
         "should set password": (browser)-> assert.equal browser.querySelector("#field-password").value, "b100d"
         "should fire change event": (browser)-> assert.ok browser.passwordChanged
+      "input without a valid type":
+        topic: (browser)->
+          browser.fill ":input[name=invalidtype]", "some value"
+        "should set value": (browser)-> assert.equal browser.querySelector("#field-invalidtype").value, "some value"
+        "should fire change event": (browser)-> assert.ok browser.invalidtypeChanged
+      "email2 input by node":
+        topic: (browser)->
+          browser.fill browser.querySelector("#field-email2"), "headchomper@example.com"
+        "should set email2 field": (browser)-> assert.equal browser.querySelector("#field-email2").value, "headchomper@example.com"
+        "should fire change event": (browser)-> assert.ok browser.email2Changed
 
   "check box":
     zombie.wants "http://localhost:3003/form"
@@ -187,7 +221,7 @@ vows.describe("Forms").addBatch(
   "select option":
     zombie.wants "http://localhost:3003/form"
       topic: (browser)->
-        for field in ["looks", "state"]
+        for field in ["looks", "state", "kills"]
           do (field)->
             browser.querySelector("#field-#{field}").addEventListener "change", -> browser["#{field}Changed"] = true
         @callback null, browser
@@ -205,12 +239,20 @@ vows.describe("Forms").addBatch(
         "should set value": (browser)-> assert.equal browser.querySelector("#field-state").value, "dead"
         "should select second option": (browser)->
           selected = (option.selected for option in browser.querySelector("#field-state").options)
-          assert.deepEqual selected, [false, true]
+          assert.deepEqual selected, [false, true, false]
         "should select first option on second click": (browser)->
           browser.select "state", "alive"
           selected = (option.selected for option in browser.querySelector("#field-state").options)
-          assert.deepEqual selected, [true, false]
+          assert.deepEqual selected, [true, false, false]
         "should fire change event": (browser)-> assert.ok browser.stateChanged
+      "select option value directly":
+        topic: (browser)->
+          browser.selectOption browser.querySelector("#option-killed-thousands")
+        "should set value": (browser)-> assert.equal browser.querySelector("#field-kills").value, "Thousands"
+        "should select second option": (browser)->
+          selected = (option.selected for option in browser.querySelector("#field-kills").options)
+          assert.deepEqual selected, [false, false, true]
+        "should fire change event": (browser)-> assert.ok browser.killsChanged
 
   "multiple select option":
     zombie.wants "http://localhost:3003/form"
@@ -277,7 +319,9 @@ vows.describe("Forms").addBatch(
         topic: (browser)->
           browser.fill("Name", "ArmBiter").fill("likes", "Arm Biting").check("You bet").
             check("Certainly").choose("Scary").select("state", "dead").select("looks", "Choose one").
-            select("#field-hobbies", "Eat Brains").select("#field-hobbies", "Sleep").check("Brains?")
+            select("#field-hobbies", "Eat Brains").select("#field-hobbies", "Sleep").check("Brains?").
+            fill('#address1_city', 'Paris').fill('#address1_street', 'CDG').
+            fill('#address2_city', 'Mikolaiv').fill('#address2_street', 'PGS')
 
           browser.querySelector("form").submit()
           browser.wait @callback
@@ -300,6 +344,8 @@ vows.describe("Forms").addBatch(
           assert.equal browser.text("#looks"), ""
         "should send multiple selected options to server": (browser)->
           assert.equal browser.text("#hobbies"), '["Eat Brains","Sleep"]'
+        "should send nested attributes in the order they are declared": (browser) ->
+          assert.equal browser.text("#addresses"), '[{"street":"CDG"},{"city":"Paris"},{"street":"PGS"},{"city":"Mikolaiv"}]'
 
     "by clicking button":
       zombie.wants "http://localhost:3003/form"
@@ -314,6 +360,7 @@ vows.describe("Forms").addBatch(
           assert.equal browser.text("#likes"), "Arm Biting"
         "should not send other button values to server": (browser)->
           assert.equal browser.text("#image_clicked"), "undefined"
+        "should return status code": (_, browser, status)-> assert.equal status, 200
 
     "by clicking image button":
       zombie.wants "http://localhost:3003/form"

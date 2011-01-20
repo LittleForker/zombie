@@ -39,6 +39,27 @@ class History
     window.__defineSetter__ "location", (url)=>
       @_assign URL.resolve(stack[index]?.url, url)
 
+    stringifyPrimitive = (v) =>
+      switch Object.prototype.toString.call(v)
+        when '[object Boolean]' then v ? 'true' : 'false'
+        when '[object Number]'  then isFinite(v) ? v : ''
+        when '[object String]'  then v
+        else ''
+
+    stringify = (obj) =>
+      sep = '&'
+      eq = '='
+
+      obj.map((k) ->
+        if Array.isArray(k[1])
+          k[1].map((v) ->
+            qs.escape(stringifyPrimitive(k[0])) + eq + qs.escape(stringifyPrimitive(v))
+          ).join(sep);
+        else
+          qs.escape(stringifyPrimitive(k[0])) + eq + qs.escape(stringifyPrimitive(k[1]))
+      ).join(sep)
+
+
     # Called when we switch to a new page with the URL of the old page.
     pageChanged = (was)=>
       url = stack[index]?.url
@@ -79,23 +100,27 @@ class History
       window.document = document
 
       # Make the actual request: called again when dealing with a redirect.
-      makeRequest = (url, method, data)=>
+      makeRequest = (url, method, data, redirected)=>
         headers = { "user-agent": browser.userAgent }
         browser.cookies(url.hostname, url.pathname).addHeader headers
 
         if method == "GET" || method == "HEAD"
-          url.search = "?" + qs.stringify(data, '&', '=', false) if data
+          url.search = "?" + stringify(data) if data
           data = null
           headers["content-length"] = 0
         else
           headers["content-type"] = enctype || "application/x-www-form-urlencoded"
           switch headers["content-type"]
             when "application/x-www-form-urlencoded"
-              data = qs.stringify(data, '&', '=', false)
+              data = stringify(data)
             when "multipart/form-data"
               boundary = "#{new Date().getTime()}#{Math.random()}"
               lines = ["--#{boundary}"]
-              for name, values of data
+              data.map((item) ->
+                name   = item[0]
+                values = item[1]
+                values = [values] unless typeof values == "array"
+
                 for value in values
                   disp = "Content-Disposition: form-data; name=\"#{name}\""
 
@@ -116,6 +141,7 @@ class History
                   lines.push content
 
                   lines.push "--#{boundary}"
+              )
               data = lines.join("\r\n") + "--\r\n"
               headers["content-type"] += "; boundary=#{boundary}"
             else data = data.toString()
@@ -136,13 +162,15 @@ class History
             response.on "data", (chunk)-> body += chunk
             response.on "end", =>
               browser.response = [response.statusCode, response.headers, body]
-              done null, { status: response.statusCode, headers: response.headers, body: body }
+              done null, { status: response.statusCode, headers: response.headers, body: body, redirected: !!redirected }
               switch response.statusCode
                 when 200
                   browser.cookies(url.hostname, url.pathname).update response.headers["set-cookie"]
+                  body = "<html></html>" if body.trim() == ""
                   document.open()
                   document.write body
                   document.close()
+
                   if document.documentElement
                     browser.emit "loaded", browser
                   else
@@ -152,7 +180,7 @@ class History
                   redirect = URL.parse(URL.resolve(url, response.headers["location"]))
                   stack[index] = new Entry(this, redirect)
                   browser.emit "redirected", redirect
-                  process.nextTick -> makeRequest redirect, "GET"
+                  process.nextTick -> makeRequest redirect, "GET", null, true
                 else
                   error = "Could not load document at #{URL.format(url)}, got #{response.statusCode}"
                   document.open()
@@ -164,7 +192,9 @@ class History
                 event = document.createEvent("HTMLEvents")
                 event.initEvent "error", true, false
                 document.dispatchEvent event
-                browser.emit "error", new Error(error)
+                error = new Error(error)
+                error.statusCode = response.statusCode
+                browser.emit "error", error
 
           client.on "error", (error)->
             event = document.createEvent("HTMLEvents")

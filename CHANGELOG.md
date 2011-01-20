@@ -2,14 +2,67 @@ zombie.js-changelog(7) -- Changelog
 ===================================
 
 
-### Version 0.8.9  2011-01-05
+### Version 0.8.11  2011-01-19
+
+If cookies do not specify a path, they are set to the root path
+rather than to the request path (Bob Lail).
+
+Cookies are allowed to specify paths other than the request path
+(Bob Lail).
+
+Ensure fields are sent in the order they are described (José Valim).
+
+Fix parsing of empty body (Vinicius Baggio).
+
+    270 Tests
+    2.6 sec to complete
+
+
+### Version 0.8.10  2011-01-13
+
+Allow setting cookies from subdomains (Damian Janowski & Michel Martens).
+
+Modified `browser.fire` to fire MouseEvents as well (Bob Lail).
+
+Added `window.title` accessor (Bob Lail).
+
+Fixed `window.navigator.userAgent` to return `userAgent` property (same
+as sent to server) (Assaf Arkin).
+
+Added support for `alert`, `confirm` and `prompt` (Assaf Arkin).
+
+Added accessors for status code from last respone (`browser.statusCode`)
+and whether last response followed a redirect (`browser.redirected`)
+(Assaf Arkin).
+
+The `visit`, `clickLink` and `pressButton` methods now pass three
+arguments to the callback: error, browser and status code (Assaf Arkin).
+
+    265 Tests
+    3.7 sec to complete
+
+
+
+### Version 0.8.9  2011-01-10
 
 Properly use the existance operator so empty strings are sent (José Valim).
 
-Fixs to XPath evaluation and sorting by document order (José Valim).
+Fix to XPath evaluation and sorting by document order (José Valim).
 
-    231 Tests
-    3.4 sec to complete
+Added `unselect`, `selectOption` and `unselectOption` to browser (Bob
+Lail).
+
+Added `cookies.clear` (Bob Lail).
+
+You can now call browser methods that accept a selector (e.g. `fill`,
+`select`) with the element itself.
+
+Fix to populate fields even if field type is invalid (Bob Lail).
+
+Update to HTML5 0.2.12.
+
+    238 Tests
+    3.2 sec to complete
 
 
 ### Version 0.8.8  2011-01-04

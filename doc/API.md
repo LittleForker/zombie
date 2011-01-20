@@ -64,7 +64,7 @@ To find out all the even rows in a table:
 CSS selectors support is provied by
 [Sizzle.js](https://github.com/jeresig/sizzle/wiki), the same engine
 used by jQuery.  You're probably familiar with it, if not, check the
-[list of supported selectors](selectors.html).
+[list of supported selectors](selectors).
 
 ### browser.body : Element
 
@@ -155,7 +155,7 @@ real browser.
 
 For example:
 
-    browser.clickLink("View Cart", function(err, browser) {
+    browser.clickLink("View Cart", function(err, browser, status) {
       assert.equal(browser.querySelectorAll("#cart .body"), 3);
     });
 
@@ -182,6 +182,10 @@ hash (Zombie.js will fire a `hashchange` event), for example:
       ...
     });
 
+### browser.statusCode : Number
+
+Returns the status code from the last response (200, 304, etc).
+
 ### browser.visit(url, callback)
 ### browser.visit(url, options, callback)
 
@@ -192,12 +196,16 @@ In the second form, sets the options for the duration of the request,
 and resets before passing control to the callback.  For example:
 
     browser.visit("http://localhost:3000", { debug: true },
-      function(err, browser) {
+      function(err, browser, status) {
         if (err)
           throw(err.message);
         console.log("The page:", browser.html());
       }
     );
+
+### browser.redirected : Boolean
+
+Returns true if the last response followed a redirect.
     
 
 ## Forms
@@ -205,7 +213,7 @@ and resets before passing control to the callback.  For example:
 Methods for interacting with form controls (e.g. `fill`, `check`) take a
 first argument that tries to identify the form control using a variety
 of approaches.  You can always select the form control using an
-appropriate [CSS selector](selectors.html).
+appropriate [CSS selector](selectors), or pass the element itself.
 
 Zombie.js can also identify form controls using their name (the value of
 the `name` attribute) or using the text of the label associated with
@@ -292,12 +300,33 @@ For example:
 
     browser.select("Currency", "brain$")
 
+See also `selectOption`.
+
 Returns itself.
+
+### browser.selectOption(option) : this
+
+Selects the option (an `OPTION` element) and returns itself.
 
 ### browser.uncheck(field) : this
 
 Unchecks a checkbox.  The argument can be the field name, label text or
 a CSS selector.
+
+### browser.unselect(field, value) : this
+ 
+Unselects an option.  The first argument can be the field name, label
+text or a CSS selector.  The second value is the option to unselect, by
+value or label.
+
+You can use this (or `unselectOption`) when dealing with multiple
+selection.
+
+Returns itself.
+
+### browser.unselectOption(option) : this
+
+Unselects the option (an `OPTION` element) and returns itself.
 
 
 ## State Management
@@ -317,8 +346,8 @@ For example:
 
     browser.cookies("localhost").set("session", "567");
 
-The `Cookies` object has the methods `get(name)`, `set(name, value)`,
-`remove(name)` and `dump()`.
+The `Cookies` object has the methods `clear()`, `get(name)`, `set(name,
+value)`, `remove(name)` and `dump()`.
 
 The `set` method accepts a third argument which may include the options
 `expires`, `maxAge` and `secure`.
@@ -339,6 +368,51 @@ also has the read-only property `length`.
 
 Returns session Storage based on the document origin (hostname/port).
 See `localStorage` above.
+
+
+## Interaction
+ 
+### browser.onalert(fn)
+
+Called by `window.alert` with the message.  If you just want to know if
+an alert was shown, you can also use `prompted` (see below).
+
+### browser.onconfirm(question, response)
+### browser.onconfirm(fn)
+
+The first form specifies a canned response to return when
+`window.confirm` is called with that question.  The second form will
+call the function with the question and use the respone of the first
+function to return a value (true or false).
+
+The response to the question can be true or false, so all canned
+responses are converted to either value.  If no response available,
+returns false.
+
+For example:
+
+    browser.onconfirm "Are you sure?", true
+
+### browser.onprompt(message, response)
+### browser.onprompt(fn)
+
+The first form specifies a canned response to return when
+`window.prompt` is called with that message.  The second form will call
+the function with the message and default value and use the response of
+the first function to return a value or false.
+
+The response to a prompt can be any value (converted to a string), false
+to indicate the user cancelled the prompt (returning null), or nothing
+to have the prompt return the default value or an empty string.
+
+For example:
+
+    browser.onprompt (message)-> Math.random()
+
+### browser.prompted(message) => boolean
+
+Returns true if user was prompted with that message by a previous call
+to `window.alert`, `window.confirm` or `window.prompt`.
 
 
 ## Events
@@ -399,7 +473,7 @@ Emitted if an error occurred loading a page or submitting a form.
 ## Debugging
 
 When trouble strikes, refer to these functions and the [troubleshooting
-guide](troubleshoot.html).
+guide](troubleshoot).
 
 ### browser.dump()
 
@@ -436,9 +510,17 @@ system browser on OS X, BSD and Linux.  Probably errors on Windows.
 
 #### Callbacks
 
-By convention most callback functions take two arguments.  If an error
-occurred, the first argument is the error and the second argument is
-`null`.  If everything went smoothly, the first argument is `null` and
-the second argument is the relevant value (e.g. the brower, a window).
+By convention the first argument to a callback function is the error.
+If the first argument is null, no error occurred, and other arguments
+may have meaningful data.
 
+For example, the second and third arguments to the callback of `visit`,
+`clickLink` and `pressButton` are the browser itself and the status
+code.
+
+    pressButton("Create", function(error, browser, status) {
+      if (error)
+        throw error;
+      assert.equal(status, 201, "Expected status 201 Created")
+    });
 

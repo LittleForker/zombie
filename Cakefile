@@ -16,7 +16,7 @@ reset = "\033[0m"
 log = (message, color, explanation) ->
   console.log color + message + reset + ' ' + (explanation or '')
 
-# Handle error, do nothing if null
+# Handle error and kill the process.
 onerror = (err)->
   if err
     process.stdout.write "#{red}#{err.stack}#{reset}\n"
@@ -49,7 +49,7 @@ task "watch", "Continously compile CoffeeScript to JavaScript", ->
   cmd = spawn("coffee", ["-cw", "-o", "lib", "src"])
   cmd.stdout.on "data", (data)-> process.stdout.write green + data + reset
   cmd.on "error", onerror
-  
+
 
 clean = (callback)->
   exec "rm -rf html lib man7", callback
@@ -62,9 +62,10 @@ runTests = (callback)->
   log "Running test suite ...", green
   exec "vows --spec", (err, stdout)->
     process.stdout.write stdout
-    callback err
-task "test", "Run all tests", -> runTests onerror
-
+    callback err if callback
+task "test", "Run all tests", ->
+  runTests (err)->
+    process.stdout.on "drain", -> process.exit -1 if err
 
 
 ## Documentation ##
@@ -136,7 +137,7 @@ generatePDF = (callback)->
   files = "index api selectors troubleshoot".split(" ").map((f)-> "html/#{f}.html")
   options = "--disable-javascript --outline --print-media-type --title Zombie.js --header-html doc/layout/header.html"
   toc = "--toc --toc-depth 2 --toc-no-dots --cover doc/layout/cover.html --allow doc/images --outline"
-  margins = "--margin-left 20 --margin-right 20 --margin-top 20 --margin-bottom 20 --header-spacing 5"
+  margins = "--margin-left 30 --margin-right 30 --margin-top 30 --margin-bottom 30 --header-spacing 5"
   exec "wkhtmltopdf #{options} #{margins} #{toc} #{files.join(" ")} html/zombie.pdf", callback
 
 generateDocs = (callback)->
@@ -152,7 +153,10 @@ generateDocs = (callback)->
 task "doc:pages",  "Generate documentation for main pages",    -> documentPages onerror
 task "doc:source", "Generate documentation from source files", -> documentSource onerror
 task "doc:man",    "Generate man pages",                       -> generateMan onerror
-task "doc:pdf",    "Generate PDF documentation",               -> generatePDF onerror
+task "doc:pdf",    "Generate PDF documentation",               ->
+  documentPages (err)->
+    onerror err
+    generatePDF onerror
 task "doc",        "Generate all documentation",               -> generateDocs onerror
 
 
@@ -164,9 +168,13 @@ publishDocs = (callback)->
     log stdout, green
     callback err
 task "doc:publish", "Publish documentation to site", ->
-  generateDocs (err)->
-    onerror error
-    publishDocs onerror
+  documentPages (err)->
+    onerror err
+    documentSource (err)->
+      onerror err
+      generatePDF (err)->
+        onerror err
+        publishDocs onerror
 
 task "publish", "Publish new version (Git, NPM, site)", ->
   # Run tests, don't publish unless tests pass.
@@ -194,19 +202,9 @@ task "publish", "Publish new version (Git, NPM, site)", ->
           log "Publishing to NPM ...", green
           build (err)->
             onerror err
-            # Beware: npm publish pushes everything it finds to the Web,
-            # don't run it on your working copy.  Here we create a clean
-            # directory with only the files we *want* to publish.
-            files = package.files.slice(0)
-            files.push path for n,path of package.directories
-            exec "rm -rf clean && mkdir clean", (err)->
+            exec "npm publish", (err, stdout, stderr)->
+              log stdout, green
               onerror err
-              exec "cp -R #{files.join(" ")} clean/", (err)->
-                onerror err
-                exec "npm publish clean", (err, stdout, stderr)->
-                  log stdout, green
-                  onerror err
 
           # We can do this in parallel.
           publishDocs onerror
-

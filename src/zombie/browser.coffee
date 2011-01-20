@@ -1,4 +1,5 @@
 jsdom = require("jsdom")
+html = jsdom.dom.level3.html
 require "./jsdom_patches"
 require "./forms"
 require "./xpath"
@@ -14,56 +15,9 @@ class Browser extends require("events").EventEmitter
     storage = require("./storage").use(this)
     eventloop = require("./eventloop").use(this)
     history = require("./history")
+    interact = require("./interact").use(this)
     xhr = require("./xhr").use(this)
 
-
-    window = null
-    windows = []
-    browser = this
-
-    this.createWindow = (name)->
-      window = jsdom.createWindow(jsdom.dom.level3.html)
-      window.__defineGetter__ "browser", => this
-      history.use(window)
-      cookies.extend window
-      storage.extend window
-      eventloop.extend window
-      xhr.extend window
-      window.JSON = JSON
-      # Default onerror handler.
-      window.onerror = (event)=> @emit "error", event.error || new Error("Error loading script")
-      # TODO: Fix
-      window.Image = ->
-
-      if name?
-        windows[name] = window
-      else
-        windows.push(window)
-
-      return window
-
-    # ### browser.open() => Window
-    #
-    # Open new browser window.
-    this.open = ->
-      return @createWindow()
-
-    # Always start with an open window.
-    @open()
-
-    # ### browser.closeWindow(window)
-    #
-    # Close the given window.
-    this.closeWindow = (w)->
-      if (w.opener)
-        window = w.opener
-
-      for key of windows
-        if windows[key] == w
-          if key.constructor == String
-            delete windows[key]
-          else
-            windows.splice(key, 1)
 
     # Options
     # -------
@@ -104,6 +58,62 @@ class Browser extends require("events").EventEmitter
           @[k] = v
         else
           throw "I don't recognize the option #{k}"
+
+
+    # Windows
+    # -------
+
+    window = null
+    windows = []
+    browser = this
+
+    this.createWindow = (name)->
+      window = jsdom.createWindow(html)
+      window.__defineGetter__ "browser", => this
+      window.__defineGetter__ "title", => @window?.document?.title
+      window.__defineSetter__ "title", (title)=> @window?.document?.title = title
+      window.navigator.userAgent = @userAgent
+      history.use(window)
+      cookies.extend window
+      storage.extend window
+      eventloop.extend window
+      interact.extend window
+      xhr.extend window
+      window.JSON = JSON
+      # Default onerror handler.
+      window.onerror = (event)=> @emit "error", event.error || new Error("Error loading script")
+      # TODO: Fix
+      window.Image = ->
+
+      if name?
+        windows[name] = window
+      else
+        windows.push(window)
+
+      return window
+
+    # ### browser.open() => Window
+    #
+    # Open new browser window.
+    this.open = ->
+      return @createWindow()
+
+    # Always start with an open window.
+    @open()
+
+    # ### browser.closeWindow(window)
+    #
+    # Close the given window.
+    this.closeWindow = (w)->
+      if (w.opener)
+        window = w.opener
+
+      for key of windows
+        if windows[key] == w
+          if key.constructor == String
+            delete windows[key]
+          else
+            windows.splice(key, 1)
 
 
     # Events
@@ -148,7 +158,7 @@ class Browser extends require("events").EventEmitter
       eventloop.wait window, terminate
       return
 
-    # ### browser.fire(name, target, calback?)
+    # ### browser.fire(name, target, callback?)
     #
     # Fire a DOM event.  You can use this to simulate a DOM event, e.g. clicking a
     # link.  These events will bubble up and can be cancelled.  With a callback, this
@@ -157,11 +167,26 @@ class Browser extends require("events").EventEmitter
     # * name -- Even name (e.g `click`)
     # * target -- Target element (e.g a link)
     # * callback -- Wait for events to be processed, then call me (optional)
-    this.fire = (name, target, callback)->
-      event = window.document.createEvent("HTMLEvents")
-      event.initEvent name, true, true
+    this.fire = (name, target, options, callback)->
+      [callback, options] = [options, null] if typeof(options) == 'function'
+      options ?= {}
+
+      klass = options.klass || if (name in mouseEventNames) then "MouseEvents" else "HTMLEvents"
+      bubbles = options.bubbles ? true
+      cancelable = options.cancelable ? true
+
+      event = window.document.createEvent(klass)
+      event.initEvent(name, bubbles, cancelable)
+
+      if options.attributes?
+        for key, value of options.attributes
+          event[key] = value
+
       target.dispatchEvent event
+
       @wait callback if callback
+
+    mouseEventNames = ['mousedown', 'mousemove', 'mouseup']
 
     # ### browser.clock => Number
     #
@@ -257,6 +282,18 @@ class Browser extends require("events").EventEmitter
     # Returns the body Element of the current document.
     @__defineGetter__ "body", -> window.document?.querySelector("body")
 
+    # ### browser.statusCode => Number
+    #
+    # Returns the status code of the last response.
+    @__defineGetter__ "statusCode", ->
+      response.status if response = @lastResponse
+    # ### browser.redirected => Boolean
+    #
+    # Returns true if the last response followed a redirect.
+    @__defineGetter__ "redirected", ->
+      response.redirected if response = @lastResponse
+
+
     # Navigation
     # ----------
 
@@ -275,7 +312,10 @@ class Browser extends require("events").EventEmitter
         window.history._assign url
         @wait (error, browser)->
           reset()
-          callback error, browser if callback
+          if callback && error
+            callback error
+          else if callback
+            callback null, browser, browser.statusCode
       return
 
     # ### browser.location => Location
@@ -309,7 +349,8 @@ class Browser extends require("events").EventEmitter
     # * callback -- Called with two arguments: error and browser
     this.clickLink = (selector, callback)->
       if link = @link(selector)
-        @fire "click", link, callback
+        @fire "click", link, =>
+          callback null, this, this.statusCode
       else
         callback new Error("No link matching '#{selector}'")
 
@@ -324,6 +365,9 @@ class Browser extends require("events").EventEmitter
     # label associated with that field (case sensitive, but ignores
     # leading/trailing spaces).
     this.field = (selector)->
+      # If the field has already been queried, return itself
+      if selector instanceof html.Element
+        return selector
       # Try more specific selector first.
       if field = @querySelector(selector)
         return field if field.tagName == "INPUT" || field.tagName == "TEXTAREA" || field.tagName == "SELECT"
@@ -353,7 +397,7 @@ class Browser extends require("events").EventEmitter
     # Returns this
     this.fill = (selector, value)->
       field = @field(selector)
-      if field && field.tagName == "TEXTAREA" || (field.tagName == "INPUT" && TEXT_TYPES.indexOf(field.type) >= 0)
+      if field && (field.tagName == "TEXTAREA" || (field.tagName == "INPUT")) # && TEXT_TYPES.indexOf(field.type) >= 0))
         throw new Error("This INPUT field is disabled") if field.getAttribute("input")
         throw new Error("This INPUT field is readonly") if field.getAttribute("readonly")
         field.value = value
@@ -450,7 +494,18 @@ class Browser extends require("events").EventEmitter
     # Returns this
     this.select = (selector, value)->
       option = findOption(selector, value)
-      if(!option.selected)
+      @selectOption(option)
+      return this
+
+    # ### browser.selectOption(option) => this
+    #
+    # Selects an option.
+    #
+    # * option -- option to select
+    #
+    # Returns this
+    this.selectOption = (option)->
+      if(option && !option.selected)
         select = @xpath("./ancestor::select", option).value[0]
         option.selected = true
         @fire "change", select
@@ -461,12 +516,23 @@ class Browser extends require("events").EventEmitter
     # Unselects an option.
     #
     # * selector -- CSS selector, field name or text of the field label
-    # * value -- Value (or label) or option to select
+    # * value -- Value (or label) or option to unselect
     #
     # Returns this
     this.unselect = (selector, value)->
       option = findOption(selector, value)
-      if(option.selected)
+      @unselectOption(option)
+      return this
+
+    # ### browser.unselectOption(option) => this
+    #
+    # Unselects an option.
+    #
+    # * option -- option to unselect
+    #
+    # Returns this
+    this.unselectOption = (option)->
+      if(option && option.selected)
         select = @xpath("./ancestor::select", option).value[0]
         throw new Error("Cannot unselect in single select") unless select.multiple
         option.removeAttribute('selected')
@@ -504,7 +570,8 @@ class Browser extends require("events").EventEmitter
         if button.getAttribute("disabled")
           callback new Error("This button is disabled")
         else
-          @fire "click", button, callback
+          @fire "click", button, =>
+            callback null, this, this.statusCode
       else
         callback new Error("No BUTTON '#{selector}'")
 
@@ -531,13 +598,59 @@ class Browser extends require("events").EventEmitter
     # Scripts
     # -------
 
+    # ### browser.evaluate(function) : Object
     # ### browser.evaluate(code, filename) : Object
     #
     # Evaluates a JavaScript expression in the context of the current window
     # and returns the result.  When evaluating external script, also include
     # filename.
+    #
+    # You can also use this to evaluate a function in the context of the
+    # window: for timers and asynchronous callbacks (e.g. XHR).
     this.evaluate = (code, filename)->
       window.__evaluate(code, filename)
+
+
+    # Interaction
+    # -----------
+
+    # ### browser.onalert(fn)
+    #
+    # Called by `window.alert` with the message.
+    this.onalert = (fn)-> interact.onalert fn
+
+    # ### browser.onconfirm(question, response)
+    # ### browser.onconfirm(fn)
+    #
+    # The first form specifies a canned response to return when
+    # `window.confirm` is called with that question.  The second form
+    # will call the function with the question and use the respone of
+    # the first function to return a value (true or false).
+    #
+    # The response to the question can be true or false, so all canned
+    # responses are converted to either value.  If no response
+    # available, returns false.
+    this.onconfirm = (question, response)-> interact.onconfirm question, response
+
+    # ### browser.onprompt(message, response)
+    # ### browser.onprompt(fn)
+    #
+    # The first form specifies a canned response to return when
+    # `window.prompt` is called with that message.  The second form will
+    # call the function with the message and default value and use the
+    # response of the first function to return a value or false.
+    #
+    # The response to a prompt can be any value (converted to a string),
+    # false to indicate the user cancelled the prompt (returning null),
+    # or nothing to have the prompt return the default value or an empty
+    # string.
+    this.onprompt = (message, response)-> interact.onprompt message, response
+
+    # ### browser.prompted(message) => boolean
+    #
+    # Returns true if user was prompted with that message
+    # (`window.alert`, `window.confirm` or `window.prompt`)
+    this.prompted = (message)-> interact.prompted(message)
 
 
     # Debugging
