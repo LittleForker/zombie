@@ -38,7 +38,9 @@ core.resourceLoader.load = (element, href, callback)->
 # Adds redirect support when loading resources (JavaScript).
 core.resourceLoader.download = (url, callback)->
   path = url.pathname + (url.search || "")
-  client = http.createClient(url.port || 80, url.hostname)
+  secure = url.protocol == "https:"
+  port = url.port || (if secure then 443 else 80)
+  client = http.createClient(port, url.hostname, secure)
   request = client.request("GET", path, "host": url.hostname)
   request.on "response", (response)->
     response.setEncoding "utf8"
