@@ -99,7 +99,7 @@ DOMWindow.prototype.__evaluate = (code, filename)->
       window._vars = ([n,v] for n, v of context).filter((v)-> !window[v[0]])
 
 DOMWindow.prototype.open = (url, name)->
-  window = this.browser.createWindow(name)
+  window = this.browser.open({name: name})
   window.location = url
   window.opener = this
   window

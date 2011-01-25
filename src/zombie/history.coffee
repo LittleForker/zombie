@@ -27,17 +27,13 @@ class Entry
 #
 # Represents window.history.
 class History
-  constructor: (window)->
+  constructor: ->
     # History is a stack of Entry objects.
     stack = []
     index = -1
 
-    browser = window.browser
-
-    window.__defineGetter__ "history", => this
-    window.__defineGetter__ "location", => stack[index]?.location || new Location(this, {})
-    window.__defineSetter__ "location", (url)=>
-      @_assign URL.resolve(stack[index]?.url, url)
+    window = null
+    browser = null
 
     stringifyPrimitive = (v) =>
       switch Object.prototype.toString.call(v)
@@ -80,6 +76,14 @@ class History
     resource = (url, method, data, enctype)=>
       method = (method || "GET").toUpperCase()
       throw new Error("Cannot load resource: #{URL.format(url)}") unless url.protocol && url.hostname
+
+      # If the browser has a new window, use it. If a document was already
+      # loaded into that window it would have state information we don't want
+      # (e.g. window.$) so open a new window.
+      if window.document
+        browser.open
+          history: window.history
+
       # Create new DOM Level 3 document, add features (load external
       # resources, etc) and associate it with current document. From this
       # point on the browser sees a new document, client register event
@@ -284,6 +288,15 @@ class History
         dump.push line
       dump
 
+    this.extend = (new_window)->
+      window = new_window
+      browser = window.browser
+
+      window.__defineGetter__ "history", => this
+      window.__defineGetter__ "location", => stack[index]?.location || new Location(this, {})
+      window.__defineSetter__ "location", (url)=>
+        @_assign URL.resolve(stack[index]?.url, url)
+
 
 # ## window.location
 #
@@ -317,5 +330,4 @@ class Location
 html.HTMLDocument.prototype.__defineGetter__ "location", -> @parentWindow.location
 
 
-exports.use = (window)->
-  return new History(window)
+exports.History = History

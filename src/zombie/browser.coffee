@@ -4,6 +4,7 @@ require "./jsdom_patches"
 require "./forms"
 require "./xpath"
 
+History = require("./history").History
 
 
 # Use the browser to open up new windows and load documents.
@@ -14,7 +15,6 @@ class Browser extends require("events").EventEmitter
     cookies = require("./cookies").use(this)
     storage = require("./storage").use(this)
     eventloop = require("./eventloop").use(this)
-    history = require("./history")
     interact = require("./interact").use(this)
     xhr = require("./xhr").use(this)
 
@@ -67,23 +67,29 @@ class Browser extends require("events").EventEmitter
     windows = []
     browser = this
 
-    this.createWindow = (name)->
+    this.createWindow = (properties)->
       window = jsdom.createWindow(html)
       window.__defineGetter__ "browser", => this
       window.__defineGetter__ "title", => @window?.document?.title
       window.__defineSetter__ "title", (title)=> @window?.document?.title = title
+
       window.navigator.userAgent = @userAgent
-      history.use(window)
       cookies.extend window
       storage.extend window
       eventloop.extend window
       interact.extend window
       xhr.extend window
+
+      history = properties.history || new History()
+      history.extend(window)
+
       window.JSON = JSON
       # Default onerror handler.
       window.onerror = (event)=> @emit "error", event.error || new Error("Error loading script")
       # TODO: Fix
       window.Image = ->
+
+      name = properties.name
 
       if name?
         windows[name] = window
@@ -95,8 +101,8 @@ class Browser extends require("events").EventEmitter
     # ### browser.open() => Window
     #
     # Open new browser window.
-    this.open = ->
-      return @createWindow()
+    this.open = (properties = {})->
+      return @createWindow(properties)
 
     # Always start with an open window.
     @open()
