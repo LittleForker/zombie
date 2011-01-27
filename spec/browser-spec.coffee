@@ -355,4 +355,16 @@ vows.describe("Browser").addBatch(
         "should not exist anymore": (browser)->
           assert.ok !browser.windows["named"]
 
+  "windows":
+    zombie.wants "http://localhost:3003/static"
+      topic: (browser)->
+        window = browser.open()
+        window.location = "http://localhost:3003/empty"
+        @callback null, browser
+      "should switch to the last open window": (browser)->
+        assert.equal("http://localhost:3003/empty", browser.window.location)
+      "should allow switching between windows": (browser)->
+        browser.switchTo(browser.windows[0])
+        assert.equal("http://localhost:3003/static", browser.window.location)
+
 ).export(module)

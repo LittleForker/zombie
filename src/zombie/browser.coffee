@@ -112,7 +112,7 @@ class Browser extends require("events").EventEmitter
     # Close the given window.
     this.closeWindow = (w)->
       if (w.opener)
-        window = w.opener
+        @switchTo(w.opener)
 
       for key of windows
         if windows[key] == w
@@ -121,6 +121,8 @@ class Browser extends require("events").EventEmitter
           else
             windows.splice(key, 1)
 
+    this.switchTo = (w)->
+      window = w
 
     # Events
     # ------
